@@ -4,9 +4,6 @@ env | grep -i npm_package_bin | while read bin_env; do
 
   if [[ "$bin_env" =~ npm_package_bin* ]]; then
 
-    IFS='=' read -a bin_env_parts <<< "$bin_env"
-    executable_name="$(basename ${bin_env_parts[1]} .js)"
-
     # if "node_modules" appears more than once in $PWD
     # we can confirm that package being installed is sub-dependency
     node_modules_count=$(echo $PWD | grep -o node_modules | wc -l)
@@ -15,6 +12,19 @@ env | grep -i npm_package_bin | while read bin_env; do
     if [ $node_modules_count -le 1 ]
     then
       is_npm_sub_dependency=false;
+      npm_bin_as_json="$(npm view $npm_package_name bin --json --silent)"
+      # If `npm view` returns 0, then it was able to find the package in the registry
+      package_in_npm_registry=$?
+      if [ $package_in_npm_registry -eq 0 ]
+      then
+        executable_name="$(echo $npm_bin_as_json | tr -d '{} \n' | cut -d\" -f2)"
+      else
+        # The package being installed is not available in the npm registry... assuming that the package name is the executable name
+        # Add a link to online doc?
+        # Here's where we can try parsing package.json ourselves
+        echo -e "!!!\tYou are installing a package which is not in the npm registry - asdf-nodejs is assuming that the package name $npm_package_name is the executable name..."
+        executable_name=$npm_package_name
+      fi
     else
       is_npm_sub_dependency=true;
     fi
@@ -27,6 +37,9 @@ env | grep -i npm_package_bin | while read bin_env; do
        [ "$executable_name" != "" ] && \
        [ "$is_npm_sub_dependency" = "false" ]
     then
+      echo "--- --- --- --- ---"
+      echo "asdf shim nodejs ./npm/bin/$executable_name"
+      echo "--- --- --- --- ---"
       asdf shim nodejs .npm/bin/$executable_name
     fi
 
